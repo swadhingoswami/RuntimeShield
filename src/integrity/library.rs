@@ -95,16 +95,20 @@ fn enumerate_linux_libraries() -> Result<Vec<LibraryEntry>> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() >= 6 {
             let path = parts[5];
-            if path.starts_with('/') && path.ends_with(".so") || path.contains(".so.") {
+            if (path.starts_with('/') && path.ends_with(".so")) || path.contains(".so.") {
                 if seen.insert(path.to_string()) {
                     let name = Path::new(path)
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_else(|| path.to_string());
 
-                    let hash = hash_file(Path::new(path))
-                        .map(|h| hex::encode(h))
-                        .unwrap_or_else(|_| "unknown".into());
+                    let hash = match hash_file(Path::new(path)) {
+                        Ok(h) => hex::encode(h),
+                        Err(e) => {
+                            log::warn!("failed to hash library '{}': {}", path, e);
+                            continue;
+                        }
+                    };
 
                     libraries.push(LibraryEntry {
                         name,
@@ -148,7 +152,10 @@ fn enumerate_macos_libraries() -> Result<Vec<LibraryEntry>> {
 
         let hash = match hash_file(Path::new(&path)) {
             Ok(h) => hex::encode(h),
-            Err(_) => "unknown".into(),
+            Err(e) => {
+                log::warn!("failed to hash macOS library '{}': {}", path, e);
+                continue;
+            }
         };
 
         libraries.push(LibraryEntry { name, path, hash });

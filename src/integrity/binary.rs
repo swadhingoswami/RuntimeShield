@@ -1,6 +1,7 @@
 use crate::core::error::{Error, Result};
-use crate::crypto::hash::{hash_file, HashValue};
-use crate::crypto::merkle::{build_manifest, build_merkle_tree, verify_page_hash, Manifest};
+use crate::crypto::hash::{hash_bytes, hash_file, HashValue};
+use crate::crypto::merkle::{build_manifest, build_merkle_tree, Manifest};
+use std::io::{Read, Seek};
 
 #[derive(Clone)]
 pub struct BinaryIntegrity {
@@ -71,17 +72,18 @@ impl BinaryIntegrity {
         }
 
         let entry = &manifest.entries[page_index];
-        let data = std::fs::read(&self.executable_path).map_err(Error::Io)?;
 
-        let start = entry.offset as usize;
-        let end = start + entry.size;
-        if end > data.len() {
-            return Err(Error::Verification("page extends beyond file".into()));
-        }
+        // Read only the page-sized chunk from the file, not the entire binary
+        let mut file = std::fs::File::open(&self.executable_path)
+            .map_err(Error::Io)?;
 
-        let page_data = &data[start..end];
-        let tree = build_merkle_tree(&data);
-        Ok(verify_page_hash(&tree, page_data, page_index))
+        file.seek(std::io::SeekFrom::Start(entry.offset)).map_err(Error::Io)?;
+
+        let mut page_data = vec![0u8; entry.size];
+        file.read_exact(&mut page_data).map_err(Error::Io)?;
+
+        let actual_hash = hash_bytes(&page_data);
+        Ok(hex::encode(actual_hash) == entry.page_hash)
     }
 
     pub fn verify_hash(&self) -> Result<HashValue> {

@@ -59,10 +59,9 @@ impl RuntimeShield {
             message: "RuntimeShield starting".into(),
         });
 
-        let mut running_dispatcher = EventDispatcher::new();
-        if let Some(ref cb) = self.builder.callback {
-            running_dispatcher.register(cb.clone());
-        }
+        // Share the same dispatcher with the background thread via Arc<Mutex>
+        // Any on_event() calls after start() will also fire in the monitor
+        let shared_dispatcher = self.dispatcher.clone_dispatcher();
 
         // Startup verification
         if self.builder.startup_verification {
@@ -108,7 +107,7 @@ impl RuntimeShield {
                 self.binary_integrity.clone(),
                 self.library_integrity.clone(),
                 self.memory_integrity.clone(),
-                running_dispatcher,
+                shared_dispatcher,
                 monitor_policy_engine,
             )?;
             self.monitor = Some(monitor);
@@ -151,10 +150,8 @@ impl RuntimeShield {
             match library.verify_all() {
                 Ok(mismatches) => {
                     result.library_ok = mismatches.is_empty();
-                    if !mismatches.is_empty() {
-                        for lib in &mismatches {
-                            result.errors.push(format!("library mismatch: {}", lib.name));
-                        }
+                    for lib in &mismatches {
+                        result.errors.push(format!("library mismatch: {}", lib.name));
                     }
                 }
                 Err(e) => {
@@ -168,12 +165,8 @@ impl RuntimeShield {
             match memory.verify_all() {
                 Ok(modified) => {
                     result.memory_ok = modified.is_empty();
-                    if !modified.is_empty() {
-                        for idx in modified {
-                            result
-                                .errors
-                                .push(format!("memory region {} modified", idx));
-                        }
+                    for idx in modified {
+                        result.errors.push(format!("memory region {} modified", idx));
                     }
                 }
                 Err(e) => {
@@ -201,15 +194,25 @@ impl RuntimeShield {
     fn startup_verification(&self) -> Result<()> {
         self.dispatcher.dispatch(Event::VerificationStarted);
 
-        // Anti-debug check at startup
         let debugger = PlatformDebugger::new();
-        if let Ok(true) = debugger.is_debugger_present() {
-            self.dispatcher.dispatch(Event::DebuggerDetected);
-            if let Some(ref engine) = self.policy_engine {
-                let action = engine.evaluate(&Event::DebuggerDetected);
-                self.dispatcher.dispatch(Event::PolicyAction {
-                    event: "DebuggerDetected".into(),
-                    action: format!("{:?}", action),
+        match debugger.is_debugger_present() {
+            Ok(true) => {
+                self.dispatcher.dispatch(Event::DebuggerDetected);
+                if let Some(ref engine) = self.policy_engine {
+                    let action = engine.evaluate(&Event::DebuggerDetected);
+                    self.dispatcher.dispatch(Event::PolicyAction {
+                        event: "DebuggerDetected".into(),
+                        action: format!("{:?}", action),
+                    });
+                    if engine.execute(&action, &Event::DebuggerDetected) {
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Ok(false) => {}
+            Err(e) => {
+                self.dispatcher.dispatch(Event::Error {
+                    message: format!("debugger check failed: {}", e),
                 });
             }
         }

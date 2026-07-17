@@ -1,26 +1,41 @@
 use crate::events::Event;
-use std::sync::Arc;
+use std::panic::{self, AssertUnwindSafe};
+use std::sync::{Arc, Mutex};
 
 pub type EventCallback = Arc<dyn Fn(Event) + Send + Sync>;
 
 pub struct EventDispatcher {
-    callbacks: Vec<EventCallback>,
+    callbacks: Arc<Mutex<Vec<EventCallback>>>,
 }
 
 impl EventDispatcher {
     pub fn new() -> Self {
         Self {
-            callbacks: Vec::new(),
+            callbacks: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
     pub fn register(&mut self, callback: EventCallback) {
-        self.callbacks.push(callback);
+        if let Ok(mut guard) = self.callbacks.lock() {
+            guard.push(callback);
+        }
     }
 
     pub fn dispatch(&self, event: Event) {
-        for cb in &self.callbacks {
-            cb(event.clone());
+        if let Ok(guard) = self.callbacks.lock() {
+            for cb in guard.iter() {
+                let cb = cb.clone();
+                let ev = event.clone();
+                let _ = panic::catch_unwind(AssertUnwindSafe(move || {
+                    cb(ev);
+                }));
+            }
+        }
+    }
+
+    pub fn clone_dispatcher(&self) -> Self {
+        Self {
+            callbacks: self.callbacks.clone(),
         }
     }
 }
@@ -53,7 +68,7 @@ mod tests {
     #[test]
     fn test_multiple_callbacks() {
         let mut dispatcher = EventDispatcher::new();
-        let results = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let results = Arc::new(Mutex::new(Vec::new()));
 
         for i in 0..3 {
             let results = results.clone();
