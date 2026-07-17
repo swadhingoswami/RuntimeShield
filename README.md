@@ -192,36 +192,242 @@ Architecture designed, implementation deferred. Trait implementations in `src/pl
 
 ## Language-Agnostic Protection
 
-RuntimeShield works with **any language or binary format** — C, C++, Go, Rust, Python, .NET, Java, or anything else that compiles to a native executable.
+RuntimeShield works with **any language or binary format** — it operates at the file system and process memory level, reading raw bytes and OS structures, not source code. Your binary could be compiled from C, C++, Go, Rust, Zig, Nim, Python (compiled), C# (NativeAOT), Java (GraalVM), or any other language.
 
 ```mermaid
-graph LR
-    A["Your App (Any Language)<br/>C / Go / Python / C# / Rust"] --> B["RuntimeShield C API<br/>libruntimeshield.so / .dylib"]
-    B --> C["Binary File Integrity<br/>ELF / Mach-O / PE — bytes are bytes"]
-    B --> D["Memory Integrity<br/>Code pages — language agnostic"]
-    B --> E["Library Integrity<br/>.so / .dylib files"]
-    B --> F["Anti-Debug<br/>OS structures"]
+graph TB
+    subgraph "Your Binary (any language)"
+        BIN["/usr/local/bin/myapp<br/>ELF / Mach-O / PE"]
+    end
+
+    subgraph "RuntimeShield (C API)"
+        CAPI["libruntimeshield.so / .dylib"]
+    end
+
+    subgraph "What Gets Verified"
+        V1["Binary File on Disk<br/>SHA-256 of entire file + Merkle tree"]
+        V2["Loaded Libraries<br/>.so / .dylib hash comparison"]
+        V3["Executable Memory Pages<br/>Read via /proc/self/mem or mach_vm_read"]
+        V4["Debugger Presence<br/>TracerPid (Linux) or P_TRACED (macOS)"]
+        V5["Process Identity<br/>PID / PPID / process name / exe path"]
+    end
+
+    BIN -->|"linked at build time<br/>or loaded with dlopen"| CAPI
+    CAPI --> V1 & V2 & V3 & V4 & V5
 ```
 
-RuntimeShield operates at the **file system and process memory level** — it reads raw bytes and OS structures, independent of the source language. Verification is the same whether the binary was produced by GCC, Clang, Go, or Rustc.
+### How to Wrap Any Binary
 
-### Integration Methods
+There are **three integration strategies** — choose the one that fits your deployment:
 
-| Method | Description |
-|---|---|
-| **C shared library** | Build as `.so`/`.dylib`, call `rt_shield_start()` from any language with C FFI |
-| **Dynamic loading** | `dlopen("libruntimeshield.so")` at runtime — no recompilation needed |
-| **In-process embedding** | Link statically or dynamically into native applications |
+#### Strategy 1: Link at Build Time (Best for C/C++/Go/Rust)
+
+Compile RuntimeShield as a static or dynamic library and link it into your application at build time. The library initializes inside your process.
+
+```bash
+# 1. Build RuntimeShield
+cargo build --release
+# → target/release/libruntimeshield.a (static)
+# → target/release/libruntimeshield.dylib (dynamic)
+
+# 2. Link with your binary
+# C/C++:
+gcc -o myapp myapp.c -L./target/release -lruntimeshield
+# Go (with cgo):
+CGO_LDFLAGS="-L./target/release -lruntimeshield" go build
+# Rust:
+# Just add runtimeshield as a crate dependency
+```
 
 ```c
-// Simple C integration — works from Go, Python, C#, Node.js, etc.
-rt_shield_t* shield = rt_shield_new();
-rt_shield_enable_binary_integrity(shield);
-rt_shield_enable_anti_debug(shield);
-rt_shield_start(shield);
+// C/C++ integration
+#include "runtimeshield.h"
+
+int main() {
+    rt_shield_t* shield = rt_shield_new();
+    rt_shield_enable_binary_integrity(shield);
+    rt_shield_enable_anti_debug(shield);
+    rt_shield_enable_runtime_monitor(shield);
+    rt_shield_set_monitor_interval(shield, 10000);
+    rt_shield_on_event(shield, my_event_handler);
+
+    if (rt_shield_start(shield) != 0) {
+        fprintf(stderr, "RuntimeShield failed to start\n");
+        return 1;
+    }
+
+    // Your application logic here
+    run_my_app();
+
+    rt_shield_stop(shield);
+    rt_shield_free(shield);
+    return 0;
+}
 ```
 
-See [docs/22_Any_Language_Integration.md](docs/22_Any_Language_Integration.md) for full language-specific examples (Go, Python, C#, Node.js, dlopen).
+#### Strategy 2: dlopen at Runtime (No Build Changes)
+
+Load RuntimeShield at runtime using `dlopen` / `dlsym`. No recompilation or relinking of your existing binary is needed — perfect for wrapping binaries you didn't write.
+
+```c
+// wrapper.c — compile separately, inject via LD_PRELOAD
+#include <dlfcn.h>
+#include <stdio.h>
+
+typedef struct rt_shield_t rt_shield_t;
+typedef rt_shield_t* (*new_fn_t)();
+typedef int (*start_fn_t)(rt_shield_t*);
+
+int __attribute__((constructor)) shield_init() {
+    void* handle = dlopen("./libruntimeshield.so", RTLD_NOW | RTLD_GLOBAL);
+    if (!handle) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 1; }
+
+    new_fn_t new_fn = (new_fn_t)dlsym(handle, "rt_shield_new");
+    start_fn_t start_fn = (start_fn_t)dlsym(handle, "rt_shield_start");
+
+    rt_shield_t* shield = new_fn();
+    return start_fn(shield);
+}
+```
+
+```bash
+# Compile the wrapper
+gcc -shared -fPIC -o shield_wrapper.so wrapper.c -ldl
+
+# Run ANY binary with RuntimeShield injected
+LD_PRELOAD=./shield_wrapper.so ./myapp
+# → myapp runs with integrity monitoring, no source changes needed
+```
+
+#### Strategy 3: Language-Specific Bindings (Python, C#, Node.js, Java)
+
+Each language uses its own FFI mechanism to call the C API.
+
+| Language | Mechanism | Example |
+|---|---|---|
+| **Python** | `ctypes.cdll.LoadLibrary("libruntimeshield.so")` | `shield = lib.rt_shield_new()` |
+| **Go** | `import "C"` with cgo | `C.rt_shield_start(shield)` |
+| **C#** | `[DllImport("libruntimeshield")]` | `rt_shield_start(shield)` |
+| **Node.js** | `ffi-napi` Library | `lib.rt_shield_start(shield)` |
+| **Java** | JNI or JNA | `Native.load("runtimeshield", RtShield.class)` |
+| **Zig** | `@cImport` | `rt_shield_start(shield)` |
+
+### Complete C API Reference
+
+```c
+// ─── Lifecycle ───────────────────────────────────────────
+rt_shield_t* rt_shield_new(void);
+void         rt_shield_free(rt_shield_t* shield);
+
+// ─── Feature Toggles ─────────────────────────────────────
+void rt_shield_enable_startup_verification(rt_shield_t* shield);
+void rt_shield_enable_runtime_monitor(rt_shield_t* shield);
+void rt_shield_enable_binary_integrity(rt_shield_t* shield);
+void rt_shield_enable_library_integrity(rt_shield_t* shield);
+void rt_shield_enable_memory_integrity(rt_shield_t* shield);
+void rt_shield_enable_anti_debug(rt_shield_t* shield);
+
+// ─── Configuration ───────────────────────────────────────
+void rt_shield_set_monitor_interval(rt_shield_t* shield, uint64_t millis);
+void rt_shield_set_policy_path(rt_shield_t* shield, const char* path);
+void rt_shield_set_manifest_path(rt_shield_t* shield, const char* path);
+
+// ─── Events ──────────────────────────────────────────────
+typedef void (*rt_event_callback_t)(int event_type, const char* message);
+void rt_shield_on_event(rt_shield_t* shield, rt_event_callback_t cb);
+
+// ─── Control ─────────────────────────────────────────────
+int  rt_shield_start(rt_shield_t* shield);   // 0 = success
+void rt_shield_stop(rt_shield_t* shield);
+
+// ─── On-Demand Verification ──────────────────────────────
+typedef struct {
+    int  binary_ok;
+    int  library_ok;
+    int  memory_ok;
+    int  debugger_detected;
+    char** errors;
+    int   error_count;
+} rt_verification_result_t;
+
+int  rt_shield_verify_now(rt_shield_t* shield, rt_verification_result_t* out);
+void rt_shield_free_result(rt_verification_result_t* result);
+```
+
+### What Integrators Get
+
+When you wrap any binary with RuntimeShield, you get these capabilities — regardless of the binary's source language:
+
+| Capability | What It Detects | Language Dependent? |
+|---|---|---|
+| **Binary fingerprint** | Executable file modified on disk | No — reads file bytes |
+| **Merkle page check** | Which 4K page of the binary changed | No — reads file bytes |
+| **Library whitelist** | Unexpected .so/.dylib loaded | No — reads file bytes |
+| **Memory code guard** | Executable pages patched in RAM | No — reads process memory |
+| **Debugger alarm** | gdb/lldb/Xcode attached | No — reads OS structures |
+| **Process pedigree** | Unexpected parent/name/exe path | No — reads OS structures |
+| **Policy enforcement** | Terminate/Callback/Log/Ignore on events | No — framework decision |
+| **Event stream** | Real-time integrity event callbacks | No — callback signature |
+
+### Manifest Generation (CI/CD Step)
+
+Manifests are generated once during CI/CD and shipped alongside the binary. This step is also language-agnostic:
+
+```bash
+# Generate manifest for any binary
+# The binary can be C, Go, Rust, or anything else
+./runtimeshield-manifest /path/to/myapp --output myapp.manifest.json
+```
+
+```json
+{
+  "root_hash": "a1b2c3d4e5f6...",
+  "total_pages": 24576,
+  "file_size": 100663296,
+  "version": "1.0.0"
+}
+```
+
+### Real-World Workflow
+
+```mermaid
+flowchart LR
+    subgraph "Dev / CI"
+        BUILD["Build Binary<br/>Any language compiler"]
+        GEN["Generate Manifest<br/>./gen-manifest myapp"]
+    end
+
+    subgraph "Deployment"
+        SHIP["Ship binary + manifest + policy<br/>+ libruntimeshield.so"]
+        WRAP["Link or LD_PRELOAD<br/>shield into process"]
+    end
+
+    subgraph "Runtime"
+        START["rt_shield_start()"]
+        VERIFY["Background verification<br/>every N ms"]
+        EVENT["Events → callback<br/>or policy action"]
+    end
+
+    BUILD --> GEN
+    GEN --> SHIP
+    SHIP --> WRAP
+    WRAP --> START
+    START --> VERIFY
+    VERIFY --> EVENT
+```
+
+### Summary
+
+| Question | Answer |
+|---|---|
+| Do I need Rust in my project? | **No.** RuntimeShield is written in Rust but consumed as a C library. Any language with C FFI works. |
+| Do I need to modify my app's source? | **Not if using dlopen/LD_PRELOAD.** You can wrap an existing binary without touching its source. |
+| Does it work with Go's static binaries? | **Yes.** Use `dlopen` at runtime or link the C archive. |
+| Does it work with Python/.NET/Java? | **Yes.** Those runtimes can call C libraries. The native executable (Python interpreter, dotnet host, JVM) is what gets verified. |
+| Does it work in Docker? | **Yes.** The `.so` and manifest are included in the image. |
+| Does the binary format matter? | **No.** ELF (Linux), Mach-O (macOS), and PE (Windows) are all supported. The framework reads bytes, not structures. |
+
+See [docs/22_Any_Language_Integration.md](docs/22_Any_Language_Integration.md) for code examples in Go, Python, C#, Node.js, and dlopen injection.
 
 ---
 
