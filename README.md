@@ -190,6 +190,41 @@ Architecture designed, implementation deferred. Trait implementations in `src/pl
 
 ---
 
+## Language-Agnostic Protection
+
+RuntimeShield works with **any language or binary format** — C, C++, Go, Rust, Python, .NET, Java, or anything else that compiles to a native executable.
+
+```mermaid
+graph LR
+    A["Your App (Any Language)<br/>C / Go / Python / C# / Rust"] --> B["RuntimeShield C API<br/>libruntimeshield.so / .dylib"]
+    B --> C["Binary File Integrity<br/>ELF / Mach-O / PE — bytes are bytes"]
+    B --> D["Memory Integrity<br/>Code pages — language agnostic"]
+    B --> E["Library Integrity<br/>.so / .dylib files"]
+    B --> F["Anti-Debug<br/>OS structures"]
+```
+
+RuntimeShield operates at the **file system and process memory level** — it reads raw bytes and OS structures, independent of the source language. Verification is the same whether the binary was produced by GCC, Clang, Go, or Rustc.
+
+### Integration Methods
+
+| Method | Description |
+|---|---|
+| **C shared library** | Build as `.so`/`.dylib`, call `rt_shield_start()` from any language with C FFI |
+| **Dynamic loading** | `dlopen("libruntimeshield.so")` at runtime — no recompilation needed |
+| **In-process embedding** | Link statically or dynamically into native applications |
+
+```c
+// Simple C integration — works from Go, Python, C#, Node.js, etc.
+rt_shield_t* shield = rt_shield_new();
+rt_shield_enable_binary_integrity(shield);
+rt_shield_enable_anti_debug(shield);
+rt_shield_start(shield);
+```
+
+See [docs/22_Any_Language_Integration.md](docs/22_Any_Language_Integration.md) for full language-specific examples (Go, Python, C#, Node.js, dlopen).
+
+---
+
 ## Modules
 
 ```mermaid
@@ -381,6 +416,7 @@ println!("Debugger: {}", if result.debugger_detected { "DETECTED" } else { "not 
 | [Performance](docs/19_Performance.md) | Timing and resource usage |
 | [Limitations](docs/20_Limitations.md) | What the framework cannot do |
 | [Future Work](docs/21_Future_Work.md) | Planned features and roadmap |
+| [Any Language Integration](docs/22_Any_Language_Integration.md) | Using RuntimeShield with C/C++/Go/Python/C#/Node.js |
 
 ---
 

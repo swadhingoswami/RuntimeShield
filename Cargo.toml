@@ -4,9 +4,12 @@ version = "0.1.0"
 description = "Cross-Platform Runtime Protection Framework for Native Applications"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/runtimeshield/runtimeshield"
+repository = "https://github.com/swadhingoswami/RuntimeShield"
 keywords = ["security", "runtime", "integrity", "protection", "tamper-detection"]
 categories = ["security", "os", "rust-patterns"]
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [features]
 default = []
