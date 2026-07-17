@@ -358,6 +358,13 @@ void rt_shield_free_result(rt_verification_result_t* result);
 
 When you wrap any binary with RuntimeShield, you get these capabilities — regardless of the binary's source language:
 
+> **Core pattern for every check:**
+> 1. **At build/deploy time** → read your binary → compute SHA-256 hash → store it in a manifest file
+> 2. **At runtime** → read the binary again → recompute SHA-256 hash → compare against the stored manifest value
+> 3. **If they match** → binary is intact. **If they differ** → binary was modified → emit event → policy engine decides action
+>
+> The hash is computed once at build time and stored. At runtime, the same computation runs again and the results are compared. No hash is ever "remembered" across runs — it's always recomputed from the current file contents.
+
 ```mermaid
 flowchart TB
     subgraph "Integrity Checks"
@@ -405,52 +412,89 @@ File on disk → std::fs::read() → SHA-256::digest() → hex::encode()
 
 #### 2. Merkle Page Check — Page-Level Integrity
 
-**What it does:** Splits the binary into 4,096-byte pages, builds a Merkle hash tree from those pages, and stores the root hash + individual page hashes in a manifest. At runtime, you can verify the entire binary (via root hash) or individual pages.
+This is a two-phase process: **manifest generation** (at build/deploy time) and **runtime verification** (in the application).
 
 ```mermaid
-graph TB
-    subgraph "Binary (any format)"
-        P0["Page 0<br/>bytes 0-4095"]
-        P1["Page 1<br/>bytes 4096-8191"]
-        P2["Page 2<br/>bytes 8192-12287"]
-        Pn["... page N"]
+flowchart TB
+    subgraph "Phase 1: Build / Deploy Time"
+        BUILD_BIN["Your Binary (any language/format)"]
+        PAGES["Split into 4,096-byte pages"]
+        HASH_PAGES["SHA-256 hash each page"]
+        BUILD_TREE["Pair hashes → build Merkle tree"]
+        STORE["Store manifest.json<br/>root_hash: a1b2...<br/>page_hashes: [e3f4..., c5d6..., ...]"]
+        SHIP["Ship to production<br/>binary + manifest.json"]
     end
 
-    subgraph "Merkle Tree"
-        L0["SHA-256(P0)"]
-        L1["SHA-256(P1)"]
-        L2["SHA-256(P2)"]
-        Ln["SHA-256(Pn)"]
-        I0["SHA-256(L0+L1)"]
-        I1["SHA-256(L2+Ln)"]
-        ROOT["Root Hash<br/>SHA-256(I0+I1)"]
+    subgraph "Phase 2: Runtime Verification"
+        READ_BIN["Read binary from disk (same path)"]
+        READ_MANIFEST["Load manifest.json"]
+        COMPUTE["Recompute SHA-256 of file"]
+        COMPARE["Compare computed hash<br/>against manifest.root_hash"]
+        DECIDE{"Match?"}
+        OK["✅ Binary intact<br/>Emit VerificationCompleted"]
+        FAIL["❌ Binary modified<br/>Emit BinaryModified → Policy Action"]
     end
 
-    P0 --> L0
-    P1 --> L1
-    P2 --> L2
-    Pn --> Ln
-    L0 --> I0
-    L1 --> I0
-    L2 --> I1
-    Ln --> I1
-    I0 --> ROOT
-    I1 --> ROOT
+    BUILD_BIN --> PAGES
+    PAGES --> HASH_PAGES
+    HASH_PAGES --> BUILD_TREE
+    BUILD_TREE --> STORE
+    STORE --> SHIP
+    SHIP --> READ_BIN
+    SHIP -.-> READ_MANIFEST
+    READ_BIN --> COMPUTE
+    READ_MANIFEST --> COMPARE
+    COMPUTE --> COMPARE
+    COMPARE --> DECIDE
+    DECIDE -->|Yes| OK
+    DECIDE -->|No| FAIL
+```
+
+**What it does:** At build time, splits the binary into 4,096-byte pages, hashes each, builds a Merkle tree, and stores the root hash + all page hashes in `manifest.json`. At runtime, re-reads the file, recomputes the root hash, and compares it against the manifest value. If they match, the binary is unmodified. If they differ, something changed.
+
+```mermaid
+graph LR
+    subgraph "Stored in manifest.json"
+        R["root_hash: a1b2c3d4e5f6..."]
+        E0["page[0]: e3f4g5..."]
+        E1["page[1]: c5d6e7..."]
+        E2["page[2]: ..."]
+        En["page[n]: ..."]
+    end
+
+    subgraph "Recomputed at Runtime"
+        R2["hash(entire binary)"]
+    end
+
+    R -->|compare| R2
 ```
 
 **Why page-level over whole-file?** If the binary integrity check fails, a full-file hash tells you only "something changed." The Merkle tree tells you **which 4K page** changed, enabling targeted forensic analysis.
 
-**What it detects:** Same as binary fingerprint but with page-level granularity. You can verify just critical pages without re-hashing the entire binary.
-
 **How it's implemented:**
-```
-File → read in 4096-byte chunks → hash each chunk → build binary tree of hashes
-                                                                              ↓
-                                                                     Store root hash
-                                                                     Store page hashes
-At runtime:
-  → Read file, rebuild tree, compare root hash   (full verification)
-  → Read single page, hash it, compare stored hash (page verification)
+```rust
+// ─── BUILD TIME ───────────────────────────────────────────
+let data = std::fs::read("myapp")?;
+let tree = build_merkle_tree(&data);     // hash pages → build tree
+let manifest = Manifest {
+    root_hash:  hex::encode(tree.root.hash),
+    entries:    page_hashes,              // one hash per 4K page
+    file_size:  data.len(),
+    version:    "1.0.0",
+};
+std::fs::write("myapp.manifest.json", serde_json::to_string(&manifest)?)?;
+
+// ─── RUNTIME ──────────────────────────────────────────────
+let data = std::fs::read("myapp")?;
+let tree = build_merkle_tree(&data);
+if hex::encode(tree.root.hash) != manifest.root_hash {
+    // Binary was modified — which page?
+    for (i, hash) in manifest.entries.iter().enumerate() {
+        if hash != hex::encode(tree.page_hashes[i]) {
+            log::error!("Page {} was modified!", i);
+        }
+    }
+}
 ```
 
 **Filesystem & OS concerns:**
