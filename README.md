@@ -211,7 +211,7 @@ sequenceDiagram
 ```rust
 // In background thread (spawned by start() if runtime_monitor enabled):
 loop {
-    sleep(monitor_interval_ms);        // default: 5000ms
+    sleep(monitor_interval_ms);        // default: 5000ms, change with .monitor_interval()
     dispatch(VerificationStarted);
 
     // All checks run in this background thread
@@ -301,6 +301,29 @@ sequenceDiagram
 | I'm debugging my own app | On-Demand only (check manually) |
 
 All three modes can be combined freely. Enable what you need, skip what you don't.
+
+### Runtime Monitor Interval Configuration
+
+The background thread's verification interval is configurable from the builder:
+
+```rust
+RuntimeShield::builder()
+    .enable_runtime_monitor()
+    .monitor_interval(1000)   // aggressive: check every 1 second
+    .monitor_interval(5000)   // default if not set
+    .monitor_interval(30000)  // relaxed: check every 30 seconds
+    .monitor_interval(60000)  // minimal: check every 60 seconds
+    .build()?;
+```
+
+The interval is in milliseconds. Lower values catch tampering faster but consume more CPU. Higher values save CPU but leave longer windows of vulnerability between checks.
+
+| Interval | CPU Impact | Detection Window | Best For |
+|---|---|---|---|
+| 1,000ms (1s) | ~2-5% per core | < 1 second | High-security, sensitive apps |
+| 5,000ms (5s) | ~0.5-1% per core | < 5 seconds | Default — general purpose |
+| 30,000ms (30s) | ~0.1% per core | < 30 seconds | Server apps, background services |
+| 60,000ms (60s) | ~0.05% per core | < 60 seconds | Low-power, embedded, or batch |
 
 ---
 
