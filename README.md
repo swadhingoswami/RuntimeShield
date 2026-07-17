@@ -163,6 +163,147 @@ graph LR
 
 ---
 
+## Three Verification Modes
+
+RuntimeShield provides three distinct ways to verify integrity. You can use any combination of them.
+
+| Mode | When It Runs | Thread | Trigger | Best For |
+|---|---|---|---|---|
+| **Startup Verification** | Once, inside `start()` | Main thread (blocking) | Automatic | Catching tampering before any logic runs |
+| **Runtime Monitor** | Every N milliseconds | Background thread (non-blocking) | Automatic | Continuous protection during execution |
+| **On-Demand** | When called | Caller's thread (blocking) | Application calls `verify_now()` | Before sensitive operations (payments, crypto, auth) |
+
+### 1. Startup Verification (runs once at start)
+
+```rust
+shield.start();
+// Inside start():
+//   1. Check TracerPid / P_TRACED         ← main thread, blocking
+//   2. Verify binary hash against manifest  ← main thread, blocking
+//   3. Enumerate and hash loaded libraries  ← main thread, blocking
+//   4. Snapshot memory regions              ← main thread, blocking
+//   5. If any check fails → policy action
+```
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Shield as RuntimeShield
+    participant OS as Operating System
+
+    App->>Shield: start()
+    Shield->>OS: read /proc/self/status (TracerPid?)
+    OS-->>Shield: TracerPid = 0 (no debugger)
+    Shield->>OS: read /usr/bin/myapp
+    OS-->>Shield: file bytes
+    Shield->>Shield: SHA-256 → compare with manifest
+    Shield->>OS: read /proc/self/maps (libraries)
+    OS-->>Shield: lib list
+    Shield->>Shield: hash each .so → compare with manifest
+    Shield->>OS: read /proc/self/maps (code regions)
+    Shield->>OS: read /proc/self/mem (region bytes)
+    Shield->>Shield: hash regions → store as snapshot
+    Shield-->>App: Ok(())
+```
+
+### 2. Runtime Monitor (background thread, periodic)
+
+```rust
+// In background thread (spawned by start() if runtime_monitor enabled):
+loop {
+    sleep(monitor_interval_ms);        // default: 5000ms
+    dispatch(VerificationStarted);
+
+    // All checks run in this background thread
+    if debugger_present() { dispatch(DebuggerDetected); policy.evaluate(); }
+    if binary_modified()  { dispatch(BinaryModified);   policy.evaluate(); }
+    if library_changed()  { dispatch(LibraryModified);  policy.evaluate(); }
+    if memory_altered()   { dispatch(MemoryIntegrityFailed); policy.evaluate(); }
+
+    dispatch(VerificationCompleted);
+}
+```
+
+```mermaid
+flowchart TB
+    subgraph "Main Application Thread"
+        A["Your app logic"]
+    end
+
+    subgraph "RuntimeShield Background Thread"
+        B["Start"]
+        C["Sleep 5000ms"]
+        D["Anti-Debug check"]
+        E{"Debugger?"}
+        F["Binary integrity check"]
+        G{"Modified?"}
+        H["Library integrity check"]
+        I{"Modified?"}
+        J["Memory integrity check"]
+        K{"Modified?"}
+        L["Dispatch event to callback"]
+    end
+
+    A -->|start()| B
+    B --> C
+    C --> D
+    D --> E
+    E -->|No| F
+    E -->|Yes| L
+    F --> G
+    G -->|No| H
+    G -->|Yes| L
+    H --> I
+    I -->|No| J
+    I -->|Yes| L
+    J --> K
+    K -->|No| C
+    K -->|Yes| L
+    L --> C
+```
+
+### 3. On-Demand Verification (application-triggered)
+
+```rust
+// Called by the application whenever needed — blocks until complete
+let result = shield.verify_now()?;
+
+// Returns immediately with a full status report
+if !result.is_integrity_ok() {
+    // Handle violation
+}
+```
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Shield as RuntimeShield
+
+    App->>Shield: verify_now()
+    Note over Shield: runs in caller's thread
+    Shield->>Shield: hash binary → compare manifest
+    Shield->>Shield: hash libraries → compare manifest
+    Shield->>Shield: hash memory regions → compare snapshot
+    Shield->>Shield: check debugger flags
+    Shield-->>App: VerificationResult { binary_ok, library_ok, memory_ok, debugger_detected, errors }
+    App->>App: evaluate result
+```
+
+### Which Mode Should You Use?
+
+| Use Case | Recommended Mode |
+|---|---|
+| I want protection from the moment my app starts | Startup + Runtime Monitor |
+| I only care about specific operations (payments, crypto) | Startup + On-Demand |
+| I want continuous protection with no delay | Startup + Runtime Monitor (1s interval) |
+| I have limited CPU budget | Startup + On-Demand (check before key ops) |
+| I'm wrapping an existing binary with LD_PRELOAD | Runtime Monitor |
+| I'm debugging my own app | On-Demand only (check manually) |
+
+All three modes can be combined freely. Enable what you need, skip what you don't.
+
+---
+
 ## Platform Implementation
 
 ### Linux
