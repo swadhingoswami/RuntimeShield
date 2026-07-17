@@ -74,7 +74,10 @@ graph TB
     API --> POL
     API --> EVT
 
-    MON --> BIN & LIB & MEM & AD
+    MON --> BIN
+    MON --> LIB
+    MON --> MEM
+    MON --> AD
 
     BIN --> HASH
     BIN --> MKL
@@ -82,8 +85,14 @@ graph TB
     MEM --> HASH
     AD --> TRAITS
 
-    BIN & LIB & MEM & AD & PID --> TRAITS
-    TRAITS --> LINUX & MACOS & WINDOWS
+    BIN --> TRAITS
+    LIB --> TRAITS
+    MEM --> TRAITS
+    AD --> TRAITS
+    PID --> TRAITS
+    TRAITS --> LINUX
+    TRAITS --> MACOS
+    TRAITS --> WINDOWS
 ```
 
 ---
@@ -94,34 +103,37 @@ graph TB
 
 ```mermaid
 flowchart LR
-    subgraph "Configure"
-        A[Policy TOML] --> B[Policy Engine]
-        C[Event Callbacks] --> D[Event Dispatcher]
+    subgraph Configure
+        A["Policy TOML"] --> B["Policy Engine"]
+        C["Event Callbacks"] --> D["Event Dispatcher"]
     end
 
-    subgraph "Startup"
-        E[Anti-Debug Check] --> F[Binary Manifest Verify]
-        F --> G[Library Enumeration]
-        G --> H[Memory Region Snapshot]
+    subgraph Startup
+        E["Anti-Debug Check"] --> F["Binary Manifest Verify"]
+        F --> G["Library Enumeration"]
+        G --> H["Memory Region Snapshot"]
     end
 
-    subgraph "Runtime (Background Thread)"
-        I[Every N ms] --> J{Verify Cycle}
-        J --> K[Debugger?]
-        J --> L[Binary Intact?]
-        J --> M[Libraries Match?]
-        J --> N[Memory Unchanged?]
-        K & L & M & N --> O[Policy Engine]
-        O --> P{Action}
-        P -->|Terminate| Q[exit(1)]
-        P -->|Callback| R[dispatch Event]
-        P -->|Log| S[log::warn!]
-        P -->|Ignore| T[continue]
+    subgraph "Runtime Verification"
+        I["Every N ms"] --> J{"Verify Cycle"}
+        J --> K["Debugger Detection"]
+        J --> L["Binary Integrity"]
+        J --> M["Library Integrity"]
+        J --> N["Memory Integrity"]
+        K --> O["Policy Engine"]
+        L --> O
+        M --> O
+        N --> O
+        O --> P{"Action"}
+        P -- Terminate --> Q["exit(1)"]
+        P -- Callback --> R["dispatch Event"]
+        P -- Log --> S["log warning"]
+        P -- Ignore --> T["continue"]
     end
 
     subgraph "On-Demand"
-        U[Application Calls verify_now()] --> V[Run All Checks]
-        V --> W[Return VerificationResult]
+        U["Application verify_now()"] --> V["Run All Checks"]
+        V --> W["Return VerificationResult"]
     end
 ```
 
@@ -130,21 +142,21 @@ flowchart LR
 ```mermaid
 graph LR
     subgraph "Main Thread"
-        M1[Application Code]
-        M2[start() / verify_now() / stop()]
+        M1["App Code"]
+        M2["start / verify_now / stop"]
     end
 
     subgraph "Background Thread"
-        B1[Verification Loop]
-        B2[Sleep interval_ms]
-        B3[Execute Checks]
-        B4[Dispatch Events]
+        B1["Verification Loop"]
+        B2["Sleep interval_ms"]
+        B3["Execute Checks"]
+        B4["Dispatch Events"]
     end
 
-    M1 -->|start()| M2
-    M2 -->|spawns| B1
+    M1 -- start --> M2
+    M2 -- spawns --> B1
     B1 --> B2 --> B3 --> B4 --> B2
-    B4 -->|callback| M1
+    B4 -- callback --> M1
 ```
 
 **Synchronization:** No shared mutable state. Verification modules are cloned at startup. Events use `Arc<dyn Fn(Event) + Send + Sync>`.
@@ -198,8 +210,13 @@ graph TD
     CORE --> CRYPTO
     CRYPTO --> INTEG
     INTEG --> PLAT
-    MON --> INTEG & EVT & POL
-    API --> CORE & MON & EVT & POL
+    MON --> INTEG
+    MON --> EVT
+    MON --> POL
+    API --> CORE
+    API --> MON
+    API --> EVT
+    API --> POL
     POL --> CONFIG
 ```
 
@@ -393,9 +410,27 @@ graph TB
         V33["Multi-Process Coordination<br/>Distributed integrity verification"]
     end
 
-    V1 --> V11 & V12 & V13
-    V11 & V12 & V13 --> V21 & V22 & V23
-    V21 & V22 & V23 --> V31 & V32 & V33
+    V1 --> V11
+    V1 --> V12
+    V1 --> V13
+    V11 --> V21
+    V11 --> V22
+    V11 --> V23
+    V12 --> V21
+    V12 --> V22
+    V12 --> V23
+    V13 --> V21
+    V13 --> V22
+    V13 --> V23
+    V21 --> V31
+    V21 --> V32
+    V21 --> V33
+    V22 --> V31
+    V22 --> V32
+    V22 --> V33
+    V23 --> V31
+    V23 --> V32
+    V23 --> V33
 ```
 
 ### Immediate Priorities
