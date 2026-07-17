@@ -841,6 +841,12 @@ flowchart LR
 
 See [docs/22_Any_Language_Integration.md](docs/22_Any_Language_Integration.md) for code examples in Go, Python, C#, Node.js, and dlopen injection.
 
+### Cross-Platform Guarantee
+
+RuntimeShield is **not** Linux fs-verity. fs-verity only works on Linux 5.4+ with ext4 or f2fs, requires root, and is absent on Windows, macOS, and older kernels. RuntimeShield uses **standard `read()` syscalls and OS-level APIs** that exist everywhere — Ubuntu, Fedora, Debian, Arch, Alpine, macOS 10.15+, Docker, WSL2, all filesystems (XFS, Btrfs, ZFS, NTFS, APFS, tmpfs, NFS, FUSE), and under SELinux/AppArmor enforcing.
+
+Full compatibility matrix at [COMPATIBILITY.md](COMPATIBILITY.md).
+
 ---
 
 ## Modules
