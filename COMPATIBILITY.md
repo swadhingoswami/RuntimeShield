@@ -98,14 +98,21 @@ All of these are in the default SELinux policy's allowed set for unconfined and 
 | **APFS** (macOS) | ✅ | ✅ | ✅ |
 | **HFS+** (macOS) | ✅ | ✅ | ✅ |
 | **SquashFS** (read-only) | ✅ | ✅ | ✅ |
-| **tmpfs** (RAM disk) | ✅ | ✅ | ✅ |
+| **tmpfs** (RAM disk, Docker layers) | ✅ | ✅ | ✅ |
 | **ramfs** | ✅ | ✅ | ✅ |
 | **NFS v3/v4** | ✅ | ✅ | ✅ |
 | **CIFS / SMB** | ✅ | ✅ | ✅ |
 | **FUSE** (sshfs, s3fs, etc.) | ✅ | ✅ | ✅ |
 | **OverlayFS** (Docker layers) | ✅ | ✅ | ✅ |
 | **UnionFS / AUFS** | ✅ | ✅ | ✅ |
-| **memfd / memfile** | ❌ No file on disk | ❌ No file on disk | ❌ No file on disk |
+| **memfd / memfile** | ⚠️ Via `/proc/self/exe` | ⚠️ Via `/proc/self/exe` | ⚠️ Via `/proc/self/exe` |
+| **execve from memory** | ✅ Via `/proc/self/exe` | ✅ Via `/proc/self/exe` | ✅ Via `/proc/self/exe` |
+
+### Notes on edge cases
+
+- **memfd / memfile**: A process executed from `memfd_create()` still has a readable entry at `/proc/self/exe`. RuntimeShield reads the binary via this path, so binary integrity verification works — provided the memfd content hasn't been modified after exec.
+- **execve from memory** (`execve("/proc/self/fd/N")`, `fexecve`, binfmt_misc): Same as memfd — `/proc/self/exe` resolves to the in-memory file and can be read back.
+- **tmpfs / ramfs**: Behave like any other filesystem for `read()`. Docker overlay layers commonly use tmpfs. Reads work identically to disk filesystems. No special manifest handling needed — a binary deployed to tmpfs has the same bytes as when it was built.
 
 ### Why all filesystems work
 
@@ -181,7 +188,7 @@ All of these are user-mode Win32 APIs available on Windows 10/11, Windows Server
 | Does it work on macOS Catalina (Intel)? | ✅ Yes |
 | Does it work in a Docker container? | ✅ Yes |
 | Does it work on XFS, Btrfs, ZFS? | ✅ Yes |
-| Does it work on NFS, FUSE, tmpfs? | ✅ Yes |
+| Does it work on NFS, FUSE, tmpfs, memfd? | ✅ Yes — reads via file path or `/proc/self/exe` |
 | Does it require fs-verity? | ❌ No — pure user-space |
 | Does it require root? | ❌ No — runs as the application user |
 | Does it require kernel modules? | ❌ No — all user-space APIs |
