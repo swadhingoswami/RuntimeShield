@@ -358,16 +358,220 @@ void rt_shield_free_result(rt_verification_result_t* result);
 
 When you wrap any binary with RuntimeShield, you get these capabilities — regardless of the binary's source language:
 
-| Capability | What It Detects | Language Dependent? |
+```mermaid
+flowchart TB
+    subgraph "Integrity Checks"
+        A["Binary Fingerprint"] --> A1["Full file SHA-256 hash"]
+        A --> A2["Compare against manifest"]
+        A --> A3["Detects any byte-level change"]
+
+        B["Merkle Page Check"] --> B1["Split binary into 4K pages"]
+        B --> B2["Hash each page individually"]
+        B --> B3["Build Merkle tree → root hash"]
+        B --> B4["Verify root + individual pages"]
+
+        C["Library Whitelist"] --> C1["Enumerate loaded .so/.dylib"]
+        C --> C2["SHA-256 hash each library file"]
+        C --> C3["Compare hashes against manifest"]
+
+        D["Memory Code Guard"] --> D1["Find r-xp memory regions"]
+        D --> D2["Read executable pages from /proc or Mach VM"]
+        D --> D3["Hash regions → compare with startup snapshot"]
+
+        E["Debugger Alarm"] --> E1["Linux: read TracerPid from /proc/self/status"]
+        E --> E2["macOS: sysctl with KERN_PROC + P_TRACED flag"]
+        E --> E3["Any non-zero tracer = debugger attached"]
+
+        F["Process Pedigree"] --> F1["Read PID / PPID / process name"]
+        F --> F2["Read executable path from OS"]
+        F --> F3["Verify against expected values"]
+    end
+```
+
+#### 1. Binary Fingerprint — Full File Integrity
+
+**What it does:** Reads the entire executable file from disk and computes a SHA-256 hash. Compares the result against the hash stored in the manifest at generation time.
+
+**What it detects:** Any modification to the binary file — patching, virus infection, corruption, or replacement. A single byte change produces a completely different hash.
+
+**How it's implemented:**
+```
+File on disk → std::fs::read() → SHA-256::digest() → hex::encode()
+                                                      ↓
+                                           Compare with manifest.root_hash
+```
+
+**OS support:** Works on Linux, macOS, and Windows. Requires the file to be readable (standard for any running process's own binary). Works on ext4, XFS, Btrfs, APFS, NTFS, ZFS — any filesystem that supports reading files.
+
+#### 2. Merkle Page Check — Page-Level Integrity
+
+**What it does:** Splits the binary into 4,096-byte pages, builds a Merkle hash tree from those pages, and stores the root hash + individual page hashes in a manifest. At runtime, you can verify the entire binary (via root hash) or individual pages.
+
+```mermaid
+graph TB
+    subgraph "Binary (any format)"
+        P0["Page 0<br/>bytes 0-4095"]
+        P1["Page 1<br/>bytes 4096-8191"]
+        P2["Page 2<br/>bytes 8192-12287"]
+        Pn["... page N"]
+    end
+
+    subgraph "Merkle Tree"
+        L0["SHA-256(P0)"]
+        L1["SHA-256(P1)"]
+        L2["SHA-256(P2)"]
+        Ln["SHA-256(Pn)"]
+        I0["SHA-256(L0+L1)"]
+        I1["SHA-256(L2+Ln)"]
+        ROOT["Root Hash<br/>SHA-256(I0+I1)"]
+    end
+
+    P0 --> L0
+    P1 --> L1
+    P2 --> L2
+    Pn --> Ln
+    L0 --> I0
+    L1 --> I0
+    L2 --> I1
+    Ln --> I1
+    I0 --> ROOT
+    I1 --> ROOT
+```
+
+**Why page-level over whole-file?** If the binary integrity check fails, a full-file hash tells you only "something changed." The Merkle tree tells you **which 4K page** changed, enabling targeted forensic analysis.
+
+**What it detects:** Same as binary fingerprint but with page-level granularity. You can verify just critical pages without re-hashing the entire binary.
+
+**How it's implemented:**
+```
+File → read in 4096-byte chunks → hash each chunk → build binary tree of hashes
+                                                                              ↓
+                                                                     Store root hash
+                                                                     Store page hashes
+At runtime:
+  → Read file, rebuild tree, compare root hash   (full verification)
+  → Read single page, hash it, compare stored hash (page verification)
+```
+
+**Filesystem & OS concerns:**
+
+| Environment | Does Merkle Check Work? | Why |
 |---|---|---|
-| **Binary fingerprint** | Executable file modified on disk | No — reads file bytes |
-| **Merkle page check** | Which 4K page of the binary changed | No — reads file bytes |
-| **Library whitelist** | Unexpected .so/.dylib loaded | No — reads file bytes |
-| **Memory code guard** | Executable pages patched in RAM | No — reads process memory |
-| **Debugger alarm** | gdb/lldb/Xcode attached | No — reads OS structures |
-| **Process pedigree** | Unexpected parent/name/exe path | No — reads OS structures |
-| **Policy enforcement** | Terminate/Callback/Log/Ignore on events | No — framework decision |
-| **Event stream** | Real-time integrity event callbacks | No — callback signature |
+| **Standard Linux (ext4/XFS)** | ✅ Yes | Normal file read access |
+| **SELinux (Enforcing)** | ✅ Yes | Process has read access to its own binary by default; SELinux labels don't block self-read |
+| **AppArmor** | ✅ Yes | Same — reading own binary is standard |
+| **Docker Container** | ✅ Yes | Container has full access to its own filesystem |
+| **Read-only rootfs** | ✅ Yes | Reading from read-only mount is allowed |
+| **macOS (APFS)** | ✅ Yes | Normal file read |
+| **Windows (NTFS)** | ✅ Yes | Normal file read via std::fs |
+| **memfd / memfile** | ❌ No | No on-disk file to read; file exists only in memory |
+| **tmpfs / ramfs** | ⚠️ Partial | File is readable but transient; manifest must be generated per-deployment |
+| **FUSE filesystem** | ✅ Depends | Works if FUSE allows read access; performance depends on FUSE implementation |
+| **SquashFS (read-only)** | ✅ Yes | Works — files are readable |
+| **NFS / network mount** | ✅ Yes | Works, but latency may increase verification time |
+| **Packed binary (UPX)** | ✅ Yes | Hash the packed binary as-is; generate manifest after packing |
+
+**Key point:** The Merkle page check uses standard file I/O (`std::fs::read` in Rust, which maps to `read()` / `pread()` system calls). It does **not** require any special kernel module, filesystem feature, or security policy exemption. If the process can read its own binary file (which every running process can), the Merkle check works.
+
+#### 3. Library Whitelist — Loaded Library Verification
+
+**What it does:** At startup and during runtime monitoring, enumerates all shared libraries loaded into the process, computes their SHA-256 hash, and compares against the manifest.
+
+**What it detects:**
+- Modified system libraries (libc, libssl, etc.)
+- LD_PRELOAD / DYLD_INSERT_LIBRARIES injection
+- Trojanized library substitutions
+- Unexpected libraries loaded into the process
+
+**How it's implemented:**
+```
+Linux:   parse /proc/self/maps for .so paths → hash each unique file
+macOS:   _dyld_get_image_name() for each loaded image → hash each unique file
+```
+
+#### 4. Memory Code Guard — Runtime Code Integrity
+
+**What it does:** At startup, takes a snapshot of all executable (non-writable) memory regions. During runtime verification, re-reads those regions and compares hashes.
+
+**What it detects:**
+- In-memory code patching (hotpatching, byte editing)
+- Detour hooks (modifying function prologues)
+- Code cave injection
+- ROP gadget modification
+
+**How it's implemented:**
+```
+Linux:   parse /proc/self/maps for r-xp regions → read via /proc/self/mem → hash
+macOS:   mach_vm_region_recurse() for executable regions → mach_vm_read() → hash
+```
+
+#### 5. Debugger Alarm — Debugger Detection
+
+**What it does:** Checks OS-level debugger flags at startup and periodically during runtime.
+
+**What it detects:**
+- gdb, lldb, strace, dtrace attached to the process
+- Any ptrace-based debugger (Linux)
+- Xcode debugger, LLDB (macOS)
+
+**How it's implemented:**
+```
+Linux:   read /proc/self/status → parse TracerPid field → non-zero = debugger
+macOS:   sysctl(KERN_PROC, KERN_PROC_PID, pid) → check P_TRACED flag in kinfo_proc
+```
+
+#### 6. Process Pedigree — Identity Verification
+
+**What it does:** Reads the process's identity from the OS and exposes it for application-level checks.
+
+**Data provided:**
+- PID (process ID)
+- PPID (parent process ID — detect if spawned by unexpected parent)
+- Process name (should match expected)
+- Executable path (should be in expected location)
+
+**What it detects:**
+- Process renaming (prctl PR_SET_NAME)
+- Binary moved from original location
+- Application running as a subprocess of an unexpected parent
+
+#### 7. Policy Enforcement
+
+Each detection event is routed through the policy engine, which maps it to an action:
+
+| Event | Possible Actions |
+|---|---|
+| DebuggerDetected | `Terminate` / `Callback` / `Log` / `Ignore` |
+| BinaryModified | `Terminate` / `Callback` / `Log` / `Ignore` |
+| LibraryModified | `Terminate` / `Callback` / `Log` / `Ignore` |
+| MemoryIntegrityFailed | `Terminate` / `Callback` / `Log` / `Ignore` |
+
+Configured via TOML policy file:
+```toml
+DebuggerDetected = "Terminate"
+BinaryModified = "Terminate"
+LibraryModified = "Log"
+MemoryModified = "Callback"
+```
+
+`Terminate` calls `exit(1)` immediately. `Callback` dispatches to your registered event handler. `Log` writes via the `log` crate. `Ignore` silently continues.
+
+#### 8. Event Stream
+
+All verification results and policy actions are delivered to registered callbacks:
+
+```
+Event Types:
+  VerificationStarted          → "cycle beginning"
+  VerificationCompleted        → "cycle done"
+  DebuggerDetected             → "debugger found!"
+  BinaryModified               → "binary changed!"
+  LibraryModified              → "library mismatch!"
+  MemoryIntegrityFailed        → "code page altered!"
+  PolicyAction {event, action} → "BinaryModified → Terminate"
+```
+
+Events are dispatched synchronously from the verification thread. Callbacks are `Arc<dyn Fn(Event) + Send + Sync>`.
 
 ### Manifest Generation (CI/CD Step)
 
