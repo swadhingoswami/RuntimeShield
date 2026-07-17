@@ -97,25 +97,26 @@ fn enumerate_linux_libraries() -> Result<Vec<LibraryEntry>> {
         if parts.len() >= 6 {
             let path = parts[5];
             if ((path.starts_with('/') && path.ends_with(".so")) || path.contains(".so."))
-                && seen.insert(path.to_string()) {
-                    let name = Path::new(path)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| path.to_string());
+                && seen.insert(path.to_string())
+            {
+                let name = Path::new(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string());
 
-                    let hash = match hash_file(Path::new(path)) {
-                        Ok(h) => hex::encode(h),
-                        Err(e) => {
-                            log::warn!("failed to hash library '{}': {}", path, e);
-                            continue;
-                        }
-                    };
+                let hash = match hash_file(Path::new(path)) {
+                    Ok(h) => hex::encode(h),
+                    Err(e) => {
+                        log::warn!("failed to hash library '{}': {}", path, e);
+                        continue;
+                    }
+                };
 
-                    libraries.push(LibraryEntry {
-                        name,
-                        path: path.to_string(),
-                        hash,
-                    });
+                libraries.push(LibraryEntry {
+                    name,
+                    path: path.to_string(),
+                    hash,
+                });
             }
         }
     }
