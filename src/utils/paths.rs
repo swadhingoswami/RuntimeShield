@@ -29,6 +29,9 @@ mod tests {
     fn test_manifest_path() {
         let path = manifest_path("test");
         assert!(path.is_some());
-        assert!(path.unwrap().to_string_lossy().ends_with("test.manifest.json"));
+        assert!(path
+            .unwrap()
+            .to_string_lossy()
+            .ends_with("test.manifest.json"));
     }
 }

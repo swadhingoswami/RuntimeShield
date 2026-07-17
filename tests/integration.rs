@@ -1,12 +1,12 @@
+use runtimeshield::config::policy::PolicyConfig;
 use runtimeshield::crypto::hash::hash_bytes;
 use runtimeshield::crypto::merkle;
+use runtimeshield::events::Event;
 use runtimeshield::integrity::binary::BinaryIntegrity;
 use runtimeshield::integrity::library::LibraryIntegrity;
 use runtimeshield::integrity::memory::MemoryIntegrity;
-use runtimeshield::events::Event;
-use runtimeshield::policy::Action;
-use runtimeshield::config::policy::PolicyConfig;
 use runtimeshield::policy::engine::PolicyEngine;
+use runtimeshield::policy::Action;
 
 #[test]
 fn test_full_integrity_roundtrip() {
@@ -72,7 +72,10 @@ fn test_policy_evaluation() {
     assert_eq!(engine.evaluate(&Event::DebuggerDetected), Action::Terminate);
     assert_eq!(engine.evaluate(&Event::BinaryModified), Action::Callback);
     assert_eq!(engine.evaluate(&Event::LibraryModified), Action::Log);
-    assert_eq!(engine.evaluate(&Event::MemoryIntegrityFailed), Action::Callback);
+    assert_eq!(
+        engine.evaluate(&Event::MemoryIntegrityFailed),
+        Action::Callback
+    );
     assert_eq!(
         engine.evaluate(&Event::HashMismatch {
             expected: "abc".into(),

@@ -1,13 +1,13 @@
 use crate::config::policy::PolicyConfig;
+use crate::core::builder::RuntimeShieldBuilder;
 use crate::core::error::Result;
 use crate::events::callback::{EventCallback, EventDispatcher};
 use crate::events::Event;
 use crate::integrity::binary::BinaryIntegrity;
 use crate::integrity::library::LibraryIntegrity;
 use crate::integrity::memory::MemoryIntegrity;
-use crate::core::builder::RuntimeShieldBuilder;
 use crate::monitor::runtime::RuntimeMonitor;
-use crate::platform::{PlatformDebugger, DebuggerDetector, PlatformProcess, ProcessIdentity};
+use crate::platform::{DebuggerDetector, PlatformDebugger, PlatformProcess, ProcessIdentity};
 use crate::policy::engine::PolicyEngine;
 
 pub struct RuntimeShield {
@@ -151,7 +151,9 @@ impl RuntimeShield {
                 Ok(mismatches) => {
                     result.library_ok = mismatches.is_empty();
                     for lib in &mismatches {
-                        result.errors.push(format!("library mismatch: {}", lib.name));
+                        result
+                            .errors
+                            .push(format!("library mismatch: {}", lib.name));
                     }
                 }
                 Err(e) => {
@@ -166,7 +168,9 @@ impl RuntimeShield {
                 Ok(modified) => {
                     result.memory_ok = modified.is_empty();
                     for idx in modified {
-                        result.errors.push(format!("memory region {} modified", idx));
+                        result
+                            .errors
+                            .push(format!("memory region {} modified", idx));
                     }
                 }
                 Err(e) => {

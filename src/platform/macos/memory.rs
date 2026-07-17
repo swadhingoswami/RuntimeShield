@@ -135,9 +135,7 @@ impl MemoryRegionReader for MacosMemory {
             let info = unsafe { info.assume_init() };
 
             // Include if executable AND not writable
-            if (info.protection & VM_PROT_EXECUTE) != 0
-                && (info.protection & VM_PROT_WRITE) == 0
-            {
+            if (info.protection & VM_PROT_EXECUTE) != 0 && (info.protection & VM_PROT_WRITE) == 0 {
                 regions.push((address as usize, region_size as usize));
             }
 
@@ -156,7 +154,11 @@ mod tests {
     fn test_code_regions() {
         let mem = MacosMemory::new();
         let result = mem.get_code_regions();
-        assert!(result.is_ok(), "get_code_regions failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "get_code_regions failed: {:?}",
+            result.err()
+        );
         let regions = result.unwrap();
         assert!(!regions.is_empty(), "should have at least one code region");
         for (_, size) in &regions {

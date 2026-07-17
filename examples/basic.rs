@@ -1,4 +1,4 @@
-use runtimeshield::{RuntimeShield, Event};
+use runtimeshield::{Event, RuntimeShield};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,38 +22,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Check every 5 seconds
         .monitor_interval(5000)
         // Register event handler
-        .on_event(Arc::new(|event: Event| {
-            match event {
-                Event::DebuggerDetected => {
-                    eprintln!("  [WARNING] Debugger detected!");
-                }
-                Event::BinaryModified => {
-                    eprintln!("  [CRITICAL] Binary has been modified!");
-                }
-                Event::LibraryModified => {
-                    eprintln!("  [WARNING] A library has been modified!");
-                }
-                Event::MemoryIntegrityFailed => {
-                    eprintln!("  [CRITICAL] Memory integrity violation!");
-                }
-                Event::VerificationStarted => {
-                    println!("  [CHECK] Starting verification cycle...");
-                }
-                Event::VerificationCompleted => {
-                    println!("  [CHECK] Verification cycle complete.");
-                }
-                Event::PolicyAction { event, action } => {
-                    println!("  [POLICY] {} → {}", event, action);
-                }
-                Event::Error { message } => {
-                    eprintln!("  [ERROR] {}", message);
-                }
-                Event::Info { message } => {
-                    println!("  [INFO] {}", message);
-                }
-                Event::HashMismatch { expected, actual } => {
-                    eprintln!("  [WARNING] Hash mismatch: expected={}, actual={}", expected, actual);
-                }
+        .on_event(Arc::new(|event: Event| match event {
+            Event::DebuggerDetected => {
+                eprintln!("  [WARNING] Debugger detected!");
+            }
+            Event::BinaryModified => {
+                eprintln!("  [CRITICAL] Binary has been modified!");
+            }
+            Event::LibraryModified => {
+                eprintln!("  [WARNING] A library has been modified!");
+            }
+            Event::MemoryIntegrityFailed => {
+                eprintln!("  [CRITICAL] Memory integrity violation!");
+            }
+            Event::VerificationStarted => {
+                println!("  [CHECK] Starting verification cycle...");
+            }
+            Event::VerificationCompleted => {
+                println!("  [CHECK] Verification cycle complete.");
+            }
+            Event::PolicyAction { event, action } => {
+                println!("  [POLICY] {} → {}", event, action);
+            }
+            Event::Error { message } => {
+                eprintln!("  [ERROR] {}", message);
+            }
+            Event::Info { message } => {
+                println!("  [INFO] {}", message);
+            }
+            Event::HashMismatch { expected, actual } => {
+                eprintln!(
+                    "  [WARNING] Hash mismatch: expected={}, actual={}",
+                    expected, actual
+                );
             }
         }))
         .build()?;
@@ -65,9 +66,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Perform on-demand verification
     println!("\nPerforming on-demand verification...");
     let result = shield.verify_now()?;
-    println!("  Binary integrity: {}", if result.binary_ok { "OK" } else { "FAILED" });
-    println!("  Library integrity: {}", if result.library_ok { "OK" } else { "FAILED" });
-    println!("  Memory integrity: {}", if result.memory_ok { "OK" } else { "FAILED" });
+    println!(
+        "  Binary integrity: {}",
+        if result.binary_ok { "OK" } else { "FAILED" }
+    );
+    println!(
+        "  Library integrity: {}",
+        if result.library_ok { "OK" } else { "FAILED" }
+    );
+    println!(
+        "  Memory integrity: {}",
+        if result.memory_ok { "OK" } else { "FAILED" }
+    );
     println!("  Debugger detected: {}", result.debugger_detected);
 
     if !result.is_integrity_ok() {

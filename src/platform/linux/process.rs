@@ -69,11 +69,7 @@ mod tests {
         let proc = LinuxProcess::new();
         match proc.process_name() {
             Ok(name) => assert!(!name.is_empty()),
-            Err(e) => assert!(
-                e.to_string().contains("/proc"),
-                "Unexpected error: {}",
-                e
-            ),
+            Err(e) => assert!(e.to_string().contains("/proc"), "Unexpected error: {}", e),
         }
     }
 }

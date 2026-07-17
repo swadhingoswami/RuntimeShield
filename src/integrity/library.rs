@@ -41,8 +41,7 @@ impl LibraryIntegrity {
 
         for lib in &self.loaded_libraries {
             if let Some(expected) = self.manifest_libraries.get(&lib.name) {
-                let actual_hash = hash_file(Path::new(&lib.path))
-                    .map_err(Error::Io)?;
+                let actual_hash = hash_file(Path::new(&lib.path)).map_err(Error::Io)?;
                 let actual_hex = hex::encode(actual_hash);
                 if actual_hex != expected.hash {
                     mismatches.push(LibraryEntry {
@@ -79,7 +78,9 @@ fn enumerate_shared_libraries() -> Result<Vec<LibraryEntry>> {
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        Err(Error::Platform("library enumeration not supported on this platform".into()))
+        Err(Error::Platform(
+            "library enumeration not supported on this platform".into(),
+        ))
     }
 }
 

@@ -1,7 +1,7 @@
 use runtimeshield::platform::DebuggerDetector;
-use runtimeshield::platform::ProcessIdentity;
 use runtimeshield::platform::PlatformDebugger;
 use runtimeshield::platform::PlatformProcess;
+use runtimeshield::platform::ProcessIdentity;
 
 #[test]
 fn test_platform_process_id() {
@@ -29,7 +29,10 @@ fn test_platform_executable_path() {
     match proc.executable_path() {
         Ok(path) => {
             assert!(!path.is_empty(), "Executable path should not be empty");
-            assert!(path.contains('/') || path.contains('\\'), "Executable path should be absolute");
+            assert!(
+                path.contains('/') || path.contains('\\'),
+                "Executable path should be absolute"
+            );
         }
         Err(e) => {
             let msg = e.to_string();

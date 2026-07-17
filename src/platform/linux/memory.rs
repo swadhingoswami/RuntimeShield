@@ -24,8 +24,9 @@ impl MemoryRegionReader for LinuxMemory {
         let file = File::open(&mem_path)
             .map_err(|e| Error::Platform(format!("failed to open {}: {}", mem_path, e)))?;
         let mut buf = vec![0u8; size];
-        file.read_exact_at(&mut buf, address as u64)
-            .map_err(|e| Error::Platform(format!("failed to read memory at {:#x}: {}", address, e)))?;
+        file.read_exact_at(&mut buf, address as u64).map_err(|e| {
+            Error::Platform(format!("failed to read memory at {:#x}: {}", address, e))
+        })?;
         Ok(buf)
     }
 
@@ -44,9 +45,10 @@ impl MemoryRegionReader for LinuxMemory {
             if perms.contains('x') {
                 let addr_range: Vec<&str> = parts[0].split('-').collect();
                 if addr_range.len() == 2 {
-                    if let (Ok(start), Ok(end)) =
-                        (usize::from_str_radix(addr_range[0], 16), usize::from_str_radix(addr_range[1], 16))
-                    {
+                    if let (Ok(start), Ok(end)) = (
+                        usize::from_str_radix(addr_range[0], 16),
+                        usize::from_str_radix(addr_range[1], 16),
+                    ) {
                         regions.push((start, end - start));
                     }
                 }
@@ -73,11 +75,7 @@ mod tests {
             }
             Err(e) => {
                 // On systems without /proc, skip
-                assert!(
-                    e.to_string().contains("/proc"),
-                    "Unexpected error: {}",
-                    e
-                );
+                assert!(e.to_string().contains("/proc"), "Unexpected error: {}", e);
             }
         }
     }

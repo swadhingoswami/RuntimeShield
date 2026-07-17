@@ -31,8 +31,7 @@ impl BinaryIntegrity {
     }
 
     pub fn generate_manifest(&self, version: &str) -> Result<Manifest> {
-        let data = std::fs::read(&self.executable_path)
-            .map_err(Error::Io)?;
+        let data = std::fs::read(&self.executable_path).map_err(Error::Io)?;
         Ok(build_manifest(&data, version))
     }
 
@@ -42,8 +41,7 @@ impl BinaryIntegrity {
             .as_ref()
             .ok_or_else(|| Error::Manifest("no manifest loaded".into()))?;
 
-        let data = std::fs::read(&self.executable_path)
-            .map_err(Error::Io)?;
+        let data = std::fs::read(&self.executable_path).map_err(Error::Io)?;
 
         let tree = build_merkle_tree(&data);
         let computed_root = hex::encode(tree.root.hash);
@@ -74,10 +72,10 @@ impl BinaryIntegrity {
         let entry = &manifest.entries[page_index];
 
         // Read only the page-sized chunk from the file, not the entire binary
-        let mut file = std::fs::File::open(&self.executable_path)
-            .map_err(Error::Io)?;
+        let mut file = std::fs::File::open(&self.executable_path).map_err(Error::Io)?;
 
-        file.seek(std::io::SeekFrom::Start(entry.offset)).map_err(Error::Io)?;
+        file.seek(std::io::SeekFrom::Start(entry.offset))
+            .map_err(Error::Io)?;
 
         let mut page_data = vec![0u8; entry.size];
         file.read_exact(&mut page_data).map_err(Error::Io)?;

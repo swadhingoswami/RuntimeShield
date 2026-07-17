@@ -22,9 +22,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let result = shield.verify_now()?;
 
-        println!("  Integrity: {}", if result.is_integrity_ok() { "PASS" } else { "FAIL" });
-        println!("  Binary: {}", if result.binary_ok { "OK" } else { "MODIFIED" });
-        println!("  Debugger: {}", if result.debugger_detected { "DETECTED" } else { "Not detected" });
+        println!(
+            "  Integrity: {}",
+            if result.is_integrity_ok() {
+                "PASS"
+            } else {
+                "FAIL"
+            }
+        );
+        println!(
+            "  Binary: {}",
+            if result.binary_ok { "OK" } else { "MODIFIED" }
+        );
+        println!(
+            "  Debugger: {}",
+            if result.debugger_detected {
+                "DETECTED"
+            } else {
+                "Not detected"
+            }
+        );
 
         if !result.errors.is_empty() {
             for err in &result.errors {

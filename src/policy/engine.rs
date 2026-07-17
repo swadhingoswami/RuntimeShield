@@ -26,10 +26,12 @@ impl PolicyEngine {
         };
 
         let action = action_str
-            .map(|s| s.parse::<Action>().unwrap_or_else(|_| {
-                log::warn!("invalid policy action '{}', falling back to Log", s);
-                Action::Log
-            }))
+            .map(|s| {
+                s.parse::<Action>().unwrap_or_else(|_| {
+                    log::warn!("invalid policy action '{}', falling back to Log", s);
+                    Action::Log
+                })
+            })
             .unwrap_or(Action::Ignore);
 
         match &action {

@@ -100,10 +100,12 @@ impl RuntimeShieldBuilder {
 
     pub fn build(mut self) -> Result<RuntimeShield> {
         let policy = if let Some(ref path) = self.policy_path.clone() {
-            let content = std::fs::read_to_string(path)
-                .map_err(|e| Error::Config(format!("failed to read policy file '{}': {}", path, e)))?;
-            let cfg: PolicyConfig = toml::from_str(&content)
-                .map_err(|e| Error::Config(format!("failed to parse policy file '{}': {}", path, e)))?;
+            let content = std::fs::read_to_string(path).map_err(|e| {
+                Error::Config(format!("failed to read policy file '{}': {}", path, e))
+            })?;
+            let cfg: PolicyConfig = toml::from_str(&content).map_err(|e| {
+                Error::Config(format!("failed to parse policy file '{}': {}", path, e))
+            })?;
             Some(cfg)
         } else {
             self.policy.take()

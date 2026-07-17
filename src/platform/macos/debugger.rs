@@ -69,9 +69,7 @@ fn check_p_traced() -> Result<bool> {
         return Err(Error::Platform("sysctl returned incomplete data".into()));
     }
 
-    let p_flag_bytes = [
-        buf[0x10], buf[0x11], buf[0x12], buf[0x13],
-    ];
+    let p_flag_bytes = [buf[0x10], buf[0x11], buf[0x12], buf[0x13]];
     let p_flag = i32::from_ne_bytes(p_flag_bytes);
 
     Ok((p_flag & P_TRACED) != 0)

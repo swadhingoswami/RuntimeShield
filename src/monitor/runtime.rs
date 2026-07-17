@@ -32,7 +32,6 @@ impl Default for RuntimeMonitor {
 }
 
 impl RuntimeMonitor {
-
     pub fn start(
         &mut self,
         interval_ms: u64,
@@ -105,7 +104,12 @@ fn check_debugger(
 ) {
     match debugger.is_debugger_present() {
         Ok(true) => {
-            handle_policy(Event::DebuggerDetected, "DebuggerDetected", dispatcher, policy_engine);
+            handle_policy(
+                Event::DebuggerDetected,
+                "DebuggerDetected",
+                dispatcher,
+                policy_engine,
+            );
         }
         Ok(false) => {}
         Err(e) => {
@@ -126,7 +130,12 @@ fn check_binary(
             Ok(_) => {}
             Err(crate::core::error::Error::HashMismatch { expected, actual }) => {
                 dispatcher.dispatch(Event::HashMismatch { expected, actual });
-                handle_policy(Event::BinaryModified, "BinaryModified", dispatcher, policy_engine);
+                handle_policy(
+                    Event::BinaryModified,
+                    "BinaryModified",
+                    dispatcher,
+                    policy_engine,
+                );
             }
             Err(e) => {
                 dispatcher.dispatch(Event::Error {
@@ -146,7 +155,12 @@ fn check_libraries(
         match library.verify_all() {
             Ok(mismatches) => {
                 if !mismatches.is_empty() {
-                    handle_policy(Event::LibraryModified, "LibraryModified", dispatcher, policy_engine);
+                    handle_policy(
+                        Event::LibraryModified,
+                        "LibraryModified",
+                        dispatcher,
+                        policy_engine,
+                    );
                 }
             }
             Err(e) => {
@@ -167,7 +181,12 @@ fn check_memory(
         match memory.verify_all() {
             Ok(modified) => {
                 if !modified.is_empty() {
-                    handle_policy(Event::MemoryIntegrityFailed, "MemoryIntegrityFailed", dispatcher, policy_engine);
+                    handle_policy(
+                        Event::MemoryIntegrityFailed,
+                        "MemoryIntegrityFailed",
+                        dispatcher,
+                        policy_engine,
+                    );
                 }
             }
             Err(e) => {

@@ -1,7 +1,7 @@
 use crate::core::error::{Error, Result};
 use crate::crypto::hash::hash_bytes;
-use crate::platform::PlatformMemory;
 use crate::platform::MemoryRegionReader;
+use crate::platform::PlatformMemory;
 
 #[derive(Clone)]
 pub struct MemoryIntegrity {
@@ -41,16 +41,18 @@ impl MemoryIntegrity {
         Ok(())
     }
 
-pub fn verify_all(&self) -> Result<Vec<usize>> {
-    if self.protected_regions.is_empty() {
-        return Err(Error::Verification("no protected regions configured".into()));
-    }
-    if self.known_hashes.len() != self.protected_regions.len() {
-        return Err(Error::Verification(
+    pub fn verify_all(&self) -> Result<Vec<usize>> {
+        if self.protected_regions.is_empty() {
+            return Err(Error::Verification(
+                "no protected regions configured".into(),
+            ));
+        }
+        if self.known_hashes.len() != self.protected_regions.len() {
+            return Err(Error::Verification(
             "number of known hashes does not match protected regions; call snapshot_hashes first"
                 .into(),
         ));
-    }
+        }
 
         let mut modified_indices = Vec::new();
 
@@ -101,6 +103,10 @@ mod tests {
         let result = mi.verify_all();
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("no protected regions") || err.contains("snapshot") || err.contains("known hash"));
+        assert!(
+            err.contains("no protected regions")
+                || err.contains("snapshot")
+                || err.contains("known hash")
+        );
     }
 }

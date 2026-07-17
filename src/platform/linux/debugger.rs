@@ -59,11 +59,7 @@ mod tests {
             }
             Err(e) => {
                 // On systems without /proc, this is acceptable
-                assert!(
-                    e.to_string().contains("/proc"),
-                    "Unexpected error: {}",
-                    e
-                );
+                assert!(e.to_string().contains("/proc"), "Unexpected error: {}", e);
             }
         }
     }

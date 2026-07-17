@@ -28,14 +28,13 @@ impl ProcessIdentity for MacosProcess {
     fn process_name(&self) -> Result<String> {
         let pid = std::process::id() as i32;
         let mut buf = [0i8; 4096];
-        let len = unsafe { proc_name(pid, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32) };
+        let len =
+            unsafe { proc_name(pid, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32) };
         if len <= 0 {
             return Err(Error::Platform("proc_name failed".into()));
         }
         // proc_name returns number of bytes written, including null terminator
-        let bytes = unsafe {
-            std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len())
-        };
+        let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len()) };
         // Find the first null byte
         let end = bytes.iter().position(|&b| b == 0).unwrap_or(buf.len());
         if end == 0 {
@@ -49,7 +48,9 @@ impl ProcessIdentity for MacosProcess {
         let mut size = buf.len() as u32;
         let result = unsafe { _NSGetExecutablePath(buf.as_mut_ptr(), &mut size) };
         if result != 0 {
-            return Err(Error::Platform("_NSGetExecutablePath: buffer too small, need larger buffer".into()));
+            return Err(Error::Platform(
+                "_NSGetExecutablePath: buffer too small, need larger buffer".into(),
+            ));
         }
         let path = unsafe { CStr::from_ptr(buf.as_ptr()) };
         Ok(path.to_string_lossy().into_owned())

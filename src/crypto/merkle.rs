@@ -35,10 +35,7 @@ pub struct Manifest {
 }
 
 pub fn build_merkle_tree(data: &[u8]) -> MerkleTree {
-    let leaf_hashes: Vec<HashValue> = data
-        .chunks(PAGE_SIZE)
-        .map(hash_bytes)
-        .collect();
+    let leaf_hashes: Vec<HashValue> = data.chunks(PAGE_SIZE).map(hash_bytes).collect();
 
     let leaf_count = leaf_hashes.len();
     if leaf_count == 0 {
