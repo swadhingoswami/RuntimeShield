@@ -96,8 +96,8 @@ fn enumerate_linux_libraries() -> Result<Vec<LibraryEntry>> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() >= 6 {
             let path = parts[5];
-            if (path.starts_with('/') && path.ends_with(".so")) || path.contains(".so.") {
-                if seen.insert(path.to_string()) {
+            if ((path.starts_with('/') && path.ends_with(".so")) || path.contains(".so."))
+                && seen.insert(path.to_string()) {
                     let name = Path::new(path)
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
@@ -116,7 +116,6 @@ fn enumerate_linux_libraries() -> Result<Vec<LibraryEntry>> {
                         path: path.to_string(),
                         hash,
                     });
-                }
             }
         }
     }
