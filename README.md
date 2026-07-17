@@ -244,7 +244,7 @@ flowchart TB
         L["Dispatch event to callback"]
     end
 
-    A -->|start()| B
+    A -- start --> B
     B --> C
     C --> D
     D --> E
