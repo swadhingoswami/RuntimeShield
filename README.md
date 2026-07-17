@@ -32,39 +32,39 @@ shield.start()?;
 ```mermaid
 graph TB
     subgraph "Application"
-        APP[Your Application Code]
+        APP["Your Application Code"]
     end
 
-    subgraph "RuntimeShield Public API"
-        API[RuntimeShield<br/>builder() / start() / verify_now()]
-        CB[Event Callbacks<br/>Arc&lt;dyn Fn(Event)&gt;]
+    subgraph "RuntimeShield API"
+        API["RuntimeShield<br/>builder / start / verify_now"]
+        CB["Event Callbacks<br/>Arc Fn(Event)"]
     end
 
     subgraph "Core Services"
-        BLD[Builder Pattern<br/>Configuration]
-        POL[Policy Engine<br/>Terminate / Callback / Log / Ignore]
-        MON[Runtime Monitor<br/>Background Verification Thread]
-        EVT[Event Dispatcher<br/>Multi-callback Dispatch]
+        BLD["Builder Pattern<br/>Configuration"]
+        POL["Policy Engine<br/>Terminate / Callback / Log / Ignore"]
+        MON["Runtime Monitor<br/>Background Thread"]
+        EVT["Event Dispatcher<br/>Multi-callback"]
     end
 
     subgraph "Integrity Verification"
-        BIN[Binary Integrity<br/>SHA-256 + Merkle Tree]
-        LIB[Library Integrity<br/>Loaded Library Hashing]
-        MEM[Memory Integrity<br/>Executable Code Regions]
-        AD[Anti-Debug<br/>Debugger Detection]
-        PID[Process Identity<br/>PID / PPID / Name / Path]
+        BIN["Binary Integrity<br/>SHA-256 + Merkle Tree"]
+        LIB["Library Integrity<br/>Loaded Library Hashing"]
+        MEM["Memory Integrity<br/>Executable Code Regions"]
+        AD["Anti-Debug<br/>Debugger Detection"]
+        PID["Process Identity<br/>PID / PPID / Name / Path"]
     end
 
-    subgraph "Cryptography"
-        HASH[SHA-256 Hashing]
-        MKL[Merkle Tree<br/>Root Hash + Page Hashes]
+    subgraph Cryptography
+        HASH["SHA-256 Hashing"]
+        MKL["Merkle Tree<br/>Root Hash + Page Hashes"]
     end
 
-    subgraph "Platform Abstraction Layer"
-        TRAITS[ProcessIdentity / DebuggerDetector / MemoryRegionReader]
-        LINUX["Linux Implementation<br/>TracerPid / procfs / dl_iterate_phdr"]
-        MACOS["macOS Implementation<br/>sysctl P_TRACED / Mach VM / dyld"]
-        WINDOWS["Windows Stub<br/>Architecture Designed"]
+    subgraph "Platform Abstraction"
+        TRAITS["ProcessIdentity / DebuggerDetector / MemoryReader"]
+        LINUX["Linux<br/>TracerPid / procfs / dl_iterate"]
+        MACOS["macOS<br/>sysctl P_TRACED / Mach VM / dyld"]
+        WINDOWS["Windows<br/>Stub - Architecture Designed"]
     end
 
     APP --> API
@@ -194,17 +194,17 @@ Architecture designed, implementation deferred. Trait implementations in `src/pl
 
 ```mermaid
 graph TD
-    subgraph "src/"
-        CORE[core/ - Builder, Error types]
-        CONFIG[config/ - Policy configuration]
-        CRYPTO[crypto/ - SHA-256, Merkle Tree]
-        INTEG[integrity/ - Binary, Library, Memory]
-        PLAT[platform/ - Linux, macOS, Windows]
-        MON[monitor/ - Runtime verification thread]
-        POL[policy/ - Policy engine]
-        EVT[events/ - Event types, Dispatcher]
-        API[api/ - Public RuntimeShield struct]
-        UTIL[utils/ - Path helpers]
+    subgraph "Source Modules"
+        CORE["core/ - Builder, Error types"]
+        CONFIG["config/ - Policy configuration"]
+        CRYPTO["crypto/ - SHA-256, Merkle Tree"]
+        INTEG["integrity/ - Binary, Library, Memory"]
+        PLAT["platform/ - Linux, macOS, Windows"]
+        MON["monitor/ - Runtime verification thread"]
+        POL["policy/ - Policy engine"]
+        EVT["events/ - Event types, Dispatcher"]
+        API["api/ - Public RuntimeShield struct"]
+        UTIL["utils/ - Path helpers"]
     end
 
     CORE --> CRYPTO
@@ -389,7 +389,7 @@ println!("Debugger: {}", if result.debugger_detected { "DETECTED" } else { "not 
 ```mermaid
 graph TB
     subgraph "Version 1.0 (Current)"
-        V1[Core Framework<br/>Linux + macOS + Windows Stub]
+        V1["Core Framework<br/>Linux + macOS + Windows Stub"]
     end
 
     subgraph "Version 1.1"
