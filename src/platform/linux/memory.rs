@@ -1,6 +1,7 @@
 use crate::core::error::{Error, Result};
 use crate::platform::MemoryRegionReader;
 
+#[derive(Clone)]
 pub struct LinuxMemory;
 
 impl LinuxMemory {
