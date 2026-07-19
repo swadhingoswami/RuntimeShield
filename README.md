@@ -8,6 +8,11 @@
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20(stub)-success)
 ![Tests](https://img.shields.io/badge/tests-54%20passing-brightgreen)
 
+🌍 Language & Binary Agnostic: 
+Built to protect applications across the ecosystem. 
+Because it operates at the system and binary level, 
+it can be used to safeguard code written in C, C++, Java, .NET, and more, regardless of the target OS.
+
 ---
 
 RuntimeShield is a modular SDK that native applications embed to verify their own integrity, detect runtime tampering, and respond through configurable policies. It is **not** an antivirus, anti-cheat, or DRM system — it is an integrity verification framework designed for clean integration.
