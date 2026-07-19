@@ -27,6 +27,22 @@ shield.start()?;
 
 ---
 
+## Why RuntimeShield?
+
+Modern native applications are increasingly exposed to runtime attacks such as:
+
+- Binary modification
+- Shared library replacement
+- Runtime memory patching
+- Debugger attachment
+- Process tampering
+
+RuntimeShield provides a lightweight, modular framework that enables applications to detect these conditions and respond through configurable security policies.
+
+Unlike antivirus or DRM solutions, RuntimeShield is designed to integrate directly into native applications with a simple API.
+
+---
+
 ## Architecture
 
 ```mermaid
